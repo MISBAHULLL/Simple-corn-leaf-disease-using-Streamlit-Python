@@ -2,6 +2,8 @@
 
 Aplikasi klasifikasi penyakit daun jagung menggunakan Machine Learning dengan antarmuka Streamlit yang modern dan responsif.
 
+![Tampilam Dashboard](image.png)
+
 ## 📋 Deskripsi
 
 Aplikasi ini melakukan inferensi untuk mengklasifikasikan penyakit pada daun jagung berdasarkan gambar yang diupload. Model XGBoost telah dilatih menggunakan fitur hand-crafted (Fine, Coarse, DOR) pada Google Colab.
