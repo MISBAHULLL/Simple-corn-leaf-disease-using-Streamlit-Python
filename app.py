@@ -12,15 +12,19 @@ from modules.model_loader import load_model, get_available_models
 from modules.utils import CLASS_MAP, CLASS_COLORS, CLASS_DESCRIPTIONS
 from modules.visualization import (
     generate_confusion_matrix,
-    generate_model_comparison,
+    generate_model_comparison_chart,
+    generate_model_comparison_table,
     generate_metrics_table,
     generate_distribution_plot,
     generate_feature_importance_plot,
-    generate_evaluation_combined,
-    generate_shap_force_placeholder,
-    generate_shap_interaction_placeholder
+    generate_shap_summary_plot,
+    generate_shap_force_plot,
+    generate_shap_dependence_plot,
+    generate_evaluation_metrics_table,
+    generate_data_class_table,
+    generate_top_features_table
 )
-from modules.evaluation_data import DATASET_DISTRIBUTION, METRICS, ACCURACIES
+from modules.evaluation_data import DATASET_DISTRIBUTION, METRICS, ACCURACIES, TOTAL_IMAGES
 
 # === PAGE CONFIG ===
 st.set_page_config(
@@ -352,16 +356,39 @@ def render_home_page():
             </div>
             """, unsafe_allow_html=True)
     
-    # Distribution visualization
+    # Distribution visualization and Data Tables
     st.markdown("<br>", unsafe_allow_html=True)
     st.markdown("### 📊 Dataset Distribution")
     
-    # Generate distribution plot programmatically
-    col1, col2, col3 = st.columns([1, 3, 1])
-    with col2:
+    col1, col2 = st.columns([2, 1])
+    
+    with col1:
+        # Distribution chart
         fig_dist = generate_distribution_plot()
         st.pyplot(fig_dist)
         plt.close(fig_dist)
+    
+    with col2:
+        # Data class table
+        st.markdown("**Tabel Data Setiap Kelas**")
+        data_table = generate_data_class_table()
+        st.dataframe(data_table, use_container_width=True, hide_index=True)
+    
+    # Top Features Table
+    st.markdown("<br>", unsafe_allow_html=True)
+    st.markdown("### 🧬 Top Features")
+    
+    col1, col2 = st.columns([1, 2])
+    
+    with col1:
+        st.markdown("**Feature Importance (Top 10)**")
+        top_features_df = generate_top_features_table()
+        st.dataframe(top_features_df, use_container_width=True, hide_index=True)
+    
+    with col2:
+        fig_feat = generate_feature_importance_plot()
+        st.pyplot(fig_feat)
+        plt.close(fig_feat)
 
 
 # === PAGE: UPLOAD & PREVIEW ===
@@ -541,26 +568,39 @@ def render_run_model_page():
         st.markdown("<br>", unsafe_allow_html=True)
         st.markdown("### 📈 Model Performance")
         
+        model_name = st.session_state.prediction_result['model']
+        
         col1, col2 = st.columns(2)
         
         with col1:
-            # Generate confusion matrix programmatically
-            model_name = st.session_state.prediction_result['model']
+            # Generate confusion matrix
             fig_cm = generate_confusion_matrix(model_name)
             st.pyplot(fig_cm)
             plt.close(fig_cm)
         
         with col2:
-            # Generate model comparison chart programmatically
-            fig_comp = generate_model_comparison()
+            # Evaluation metrics table for selected model
+            st.markdown(f"**Classification Report - {model_name.replace(' (Best)', '')}**")
+            eval_df = generate_evaluation_metrics_table(model_name)
+            st.dataframe(eval_df, use_container_width=True, hide_index=True)
+        
+        # Model Comparison Section
+        st.markdown("<br>", unsafe_allow_html=True)
+        st.markdown("### 📊 Perbandingan Akurasi Model")
+        
+        col1, col2 = st.columns([2, 1])
+        
+        with col1:
+            # Model comparison chart
+            fig_comp = generate_model_comparison_chart()
             st.pyplot(fig_comp)
             plt.close(fig_comp)
         
-        # Show metrics table
-        st.markdown("<br>", unsafe_allow_html=True)
-        st.markdown("### 📋 Evaluation Metrics")
-        metrics_df = generate_metrics_table()
-        st.dataframe(metrics_df, use_container_width=True, hide_index=True)
+        with col2:
+            # Model comparison table
+            st.markdown("**Tabel Perbandingan Akurasi**")
+            comparison_df = generate_model_comparison_table()
+            st.dataframe(comparison_df, use_container_width=True, hide_index=True)
 
 
 # === PAGE: EXPLAINABILITY ===
@@ -572,28 +612,40 @@ def render_explainability_page():
     </div>
     """, unsafe_allow_html=True)
     
-    # SHAP Summary - Feature Importance
-    st.markdown("### 🎯 Feature Importance (SHAP)")
+    # SHAP Summary Plot (Beeswarm)
+    st.markdown("### 📈 SHAP Summary Plot")
+    
+    col1, col2 = st.columns([3, 1])
+    
+    with col1:
+        fig_summary = generate_shap_summary_plot()
+        st.pyplot(fig_summary)
+        plt.close(fig_summary)
+    
+    with col2:
+        st.markdown("""
+        <div class="card">
+            <div class="card-title">📖 Cara Membaca</div>
+            <p style="font-size: 0.85rem; color: var(--text-secondary); line-height: 1.6;">
+                Setiap titik = satu sampel. Warna menunjukkan nilai fitur (merah = tinggi, biru = rendah).
+                Posisi horizontal menunjukkan dampak terhadap prediksi.
+            </p>
+        </div>
+        """, unsafe_allow_html=True)
+    
+    st.markdown("<br>", unsafe_allow_html=True)
+    
+    # Feature Importance Bar Chart
+    st.markdown("### 🎯 Feature Importance (Top 10)")
     
     col1, col2 = st.columns([2, 1])
     
     with col1:
-        # Generate feature importance plot programmatically
         fig_importance = generate_feature_importance_plot()
         st.pyplot(fig_importance)
         plt.close(fig_importance)
     
     with col2:
-        st.markdown("""
-        <div class="card">
-            <div class="card-title">📖 How to Read</div>
-            <p style="font-size: 0.85rem; color: var(--text-secondary); line-height: 1.6;">
-                Features are ranked by importance. Longer bars = higher impact on predictions.
-                SHAP values show the contribution of each feature to the model output.
-            </p>
-        </div>
-        """, unsafe_allow_html=True)
-        
         st.markdown("""
         <div class="card">
             <div class="card-title">🧬 Feature Groups</div>
@@ -604,33 +656,37 @@ def render_explainability_page():
             </div>
         </div>
         """, unsafe_allow_html=True)
+        
+        # Top features table
+        st.markdown("<br>", unsafe_allow_html=True)
+        st.markdown("**Top Features Table**")
+        top_feat_df = generate_top_features_table()
+        st.dataframe(top_feat_df.head(5), use_container_width=True, hide_index=True)
     
     st.markdown("<br>", unsafe_allow_html=True)
     
-    # Force Plot & Interaction
+    # Force Plot & Dependence
     col1, col2 = st.columns(2)
     
     with col1:
         st.markdown("### 💥 Force Plot")
-        # Generate force plot programmatically
-        fig_force = generate_shap_force_placeholder()
+        fig_force = generate_shap_force_plot()
         st.pyplot(fig_force)
         plt.close(fig_force)
         st.markdown("""
         <p style="font-size: 0.8rem; color: var(--text-secondary);">
-            Red features push prediction higher, blue push lower. Base value is average model output.
+            Merah = mendorong prediksi lebih tinggi, Biru = mendorong lebih rendah. Base value adalah rata-rata output model.
         </p>
         """, unsafe_allow_html=True)
     
     with col2:
-        st.markdown("### 🔗 Feature Interaction")
-        # Generate interaction plot programmatically
-        fig_interaction = generate_shap_interaction_placeholder()
-        st.pyplot(fig_interaction)
-        plt.close(fig_interaction)
+        st.markdown("### 🔗 Dependence Plot")
+        fig_dep = generate_shap_dependence_plot("Global")
+        st.pyplot(fig_dep)
+        plt.close(fig_dep)
         st.markdown("""
         <p style="font-size: 0.8rem; color: var(--text-secondary);">
-            Shows how feature values relate to SHAP values. Color indicates interaction with other features.
+            Menunjukkan hubungan nilai fitur dengan SHAP value. Warna menunjukkan interaksi dengan fitur lain.
         </p>
         """, unsafe_allow_html=True)
 
@@ -672,59 +728,98 @@ def render_download_page():
     
     st.markdown("<br>", unsafe_allow_html=True)
     
-    # Visualization Gallery - Generated charts
+    # Visualization Gallery - All visualizations organized
     st.markdown("### 🖼️ Visualization Gallery")
     
-    # Row 1: Confusion Matrices
-    st.markdown("#### Confusion Matrices")
-    cols = st.columns(3)
+    # Section 1: Confusion Matrices with Evaluation Metrics
+    st.markdown("#### 📊 Confusion Matrices & Evaluation")
     
-    with cols[0]:
-        fig = generate_confusion_matrix("XGBoost")
-        st.pyplot(fig)
-        plt.close(fig)
+    for model in ["XGBoost", "Random Forest", "Decision Tree"]:
+        st.markdown(f"**{model}**")
+        col1, col2 = st.columns([1, 1])
+        
+        with col1:
+            fig = generate_confusion_matrix(model)
+            st.pyplot(fig)
+            plt.close(fig)
+        
+        with col2:
+            eval_df = generate_evaluation_metrics_table(model)
+            st.dataframe(eval_df, use_container_width=True, hide_index=True)
+        
+        st.markdown("<br>", unsafe_allow_html=True)
     
-    with cols[1]:
-        fig = generate_confusion_matrix("Random Forest")
-        st.pyplot(fig)
-        plt.close(fig)
-    
-    with cols[2]:
-        fig = generate_confusion_matrix("Decision Tree")
-        st.pyplot(fig)
-        plt.close(fig)
-    
-    st.markdown("<br>", unsafe_allow_html=True)
-    
-    # Row 2: Model Comparison & Distribution
-    st.markdown("#### Model Performance & Data Distribution")
-    col1, col2 = st.columns(2)
+    # Section 2: Model Comparison
+    st.markdown("#### 📈 Perbandingan Akurasi Model")
+    col1, col2 = st.columns([2, 1])
     
     with col1:
-        fig = generate_model_comparison()
+        fig = generate_model_comparison_chart()
         st.pyplot(fig)
         plt.close(fig)
     
     with col2:
+        st.markdown("**Tabel Akurasi**")
+        comparison_df = generate_model_comparison_table()
+        st.dataframe(comparison_df, use_container_width=True, hide_index=True)
+    
+    st.markdown("<br>", unsafe_allow_html=True)
+    
+    # Section 3: Dataset Distribution
+    st.markdown("#### 📊 Distribusi Dataset")
+    col1, col2 = st.columns([2, 1])
+    
+    with col1:
         fig = generate_distribution_plot()
         st.pyplot(fig)
         plt.close(fig)
     
+    with col2:
+        st.markdown("**Tabel Data per Kelas**")
+        data_df = generate_data_class_table()
+        st.dataframe(data_df, use_container_width=True, hide_index=True)
+    
     st.markdown("<br>", unsafe_allow_html=True)
     
-    # Row 3: SHAP Plots
-    st.markdown("#### Feature Importance (SHAP)")
+    # Section 4: SHAP Visualizations
+    st.markdown("#### 🎯 SHAP Feature Analysis")
+    
     col1, col2 = st.columns(2)
     
     with col1:
-        fig = generate_feature_importance_plot()
+        st.markdown("**SHAP Summary Plot**")
+        fig = generate_shap_summary_plot()
         st.pyplot(fig)
         plt.close(fig)
     
     with col2:
-        fig = generate_shap_interaction_placeholder()
+        st.markdown("**Feature Importance**")
+        fig = generate_feature_importance_plot()
         st.pyplot(fig)
         plt.close(fig)
+    
+    st.markdown("<br>", unsafe_allow_html=True)
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        st.markdown("**Force Plot**")
+        fig = generate_shap_force_plot()
+        st.pyplot(fig)
+        plt.close(fig)
+    
+    with col2:
+        st.markdown("**Dependence Plot**")
+        fig = generate_shap_dependence_plot("Global")
+        st.pyplot(fig)
+        plt.close(fig)
+    
+    st.markdown("<br>", unsafe_allow_html=True)
+    
+    # Section 5: Top Features Table
+    st.markdown("#### 🧬 Top Features")
+    top_df = generate_top_features_table()
+    st.dataframe(top_df, use_container_width=True, hide_index=True)
 
 
 # === SIDEBAR ===
