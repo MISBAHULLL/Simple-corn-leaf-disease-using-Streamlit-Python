@@ -2,7 +2,7 @@
 Pipeline module for corn leaf disease classification.
 
 This module combines preprocessing, segmentation, and feature extraction
-into a single prediction pipeline using the trained XGBoost model.
+into a single prediction pipeline using trained models.
 """
 
 import os
@@ -14,15 +14,17 @@ from .preprocessing import preprocess_pil_image
 from .segmentation import segment_otsu
 from .feature_extraction import extract_features
 from .utils import CLASS_MAP
+from .model_loader import load_model as load_model_by_name, get_available_models
 
 
-# Global model cache
+# Global model cache (for backward compatibility)
 _model = None
 
 
 def load_model():
     """
     Load the trained XGBoost model from the model directory.
+    (Backward compatibility function)
 
     Returns:
         Trained XGBoost model
@@ -43,16 +45,31 @@ def load_model():
 
 def predict_image(pil_image):
     """
-    Complete prediction pipeline for a single image.
+    Complete prediction pipeline for a single image using default XGBoost model.
+    (Backward compatibility function)
+
+    Args:
+        pil_image: PIL Image object
+
+    Returns:
+        tuple: (pred_class, probabilities, segmentation_image)
+    """
+    return predict_image_with_model(pil_image, "XGBoost (Best)")
+
+
+def predict_image_with_model(pil_image, model_name="XGBoost (Best)"):
+    """
+    Complete prediction pipeline for a single image with model selection.
 
     Pipeline steps:
     1. Preprocess image (resize, normalize, grayscale)
     2. Segment using Otsu thresholding
     3. Extract features (Fine + Coarse + DOR = 313 dimensions)
-    4. Predict using trained XGBoost model
+    4. Predict using selected model
 
     Args:
         pil_image: PIL Image object
+        model_name: Name of model to use ("XGBoost (Best)", "Random Forest", "Decision Tree")
 
     Returns:
         tuple: (pred_class, probabilities, segmentation_image)
@@ -69,8 +86,8 @@ def predict_image(pil_image):
     # Step 3: Extract features
     features = extract_features(gray)
     
-    # Step 4: Load model and predict
-    model = load_model()
+    # Step 4: Load selected model and predict
+    model = load_model_by_name(model_name)
     
     # Reshape features for prediction (1, 313)
     features = features.reshape(1, -1)
@@ -93,3 +110,4 @@ def get_class_names():
         list: List of class names in order
     """
     return CLASS_MAP.copy()
+

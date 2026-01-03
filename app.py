@@ -3,10 +3,14 @@ import numpy as np
 from PIL import Image
 import os
 import time
+import pandas as pd
+from datetime import datetime
 
-from modules.pipeline import predict_image, get_class_names, load_model
+from modules.pipeline import predict_image_with_model, get_class_names
+from modules.model_loader import load_model, get_available_models
 from modules.utils import CLASS_MAP, CLASS_COLORS, CLASS_DESCRIPTIONS
 
+# === PAGE CONFIG ===
 st.set_page_config(
     page_title="CornShield - Disease Classifier",
     page_icon="🌽",
@@ -14,428 +18,702 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-
+# === GLOBAL STYLES (Professional & Clean) ===
 st.markdown("""
 <style>
-    @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap');
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
 
-    /* VARIABLE DEFINITIONS */
     :root {
-        --primary-green: #2E7D32;
-        --light-green: #A5D6A7;
-        --accent-yellow: #FFC107;
-        --dark-bg: #0f1b2b;
-        --card-bg: #ffffff;
-        --text-dark: #1f2937;
-        --text-light: #6b7280;
-        --shadow-light: 4px 4px 10px rgba(0,0,0,0.05), -4px -4px 10px rgba(255,255,255,0.8);
-        --shadow-hover: 6px 6px 15px rgba(46, 125, 50, 0.15), -6px -6px 15px rgba(255,255,255,1);
+        --primary: #16a34a;
+        --primary-dark: #15803d;
+        --primary-light: #dcfce7;
+        --accent: #eab308;
+        --bg-main: #f8fafc;
+        --bg-card: #ffffff;
+        --text-primary: #0f172a;
+        --text-secondary: #64748b;
+        --border: #e2e8f0;
+        --shadow-sm: 0 1px 2px rgba(0,0,0,0.05);
+        --shadow-md: 0 4px 6px -1px rgba(0,0,0,0.1);
+        --radius: 12px;
     }
 
-    /* GLOBAL STYLES */
     html, body, [class*="css"] {
-        font-family: 'Poppins', sans-serif;
+        font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
     }
 
     .stApp {
-        background: #F4F7F6;
-    }
-    
-    /* REMOVE DEFAULT STREAMLIT PADDING */
-    .clean-block.css-13ln4jf {
-        padding-top: 2rem;
+        background: var(--bg-main);
     }
 
-    /* CUSTOM COMPONENTS */
-    
-    /* Hero Section */
-    .hero-container {
-        border-radius: 20px;
-        background: linear-gradient(135deg, var(--primary-green) 0%, #1b5e20 100%);
+    /* Hero Section - Compact */
+    .hero {
+        background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
         color: white;
-        padding: 3rem 2rem;
-        margin-bottom: 2rem;
-        box-shadow: 0 10px 25px rgba(46, 125, 50, 0.2);
+        padding: 2rem 2.5rem;
+        border-radius: var(--radius);
+        margin-bottom: 1.5rem;
         position: relative;
         overflow: hidden;
     }
     
-    /* Abstract corn leaf pattern overlay */
-    .hero-container::after {
+    .hero::before {
         content: "🌽";
-        font-size: 15rem;
         position: absolute;
-        right: -2rem;
-        bottom: -4rem;
-        opacity: 0.1;
-        transform: rotate(-15deg);
+        right: 20px;
+        top: 50%;
+        transform: translateY(-50%);
+        font-size: 4rem;
+        opacity: 0.15;
     }
 
-    .hero-title {
-        font-size: 2.8rem;
+    .hero h1 {
+        font-size: 1.75rem;
         font-weight: 700;
-        margin-bottom: 0.5rem;
-        text-shadow: 0 2px 4px rgba(0,0,0,0.2);
+        margin: 0 0 0.5rem 0;
     }
 
-    .hero-subtitle {
-        font-size: 1.1rem;
-        font-weight: 300;
-        max-width: 600px;
+    .hero p {
+        font-size: 0.95rem;
         opacity: 0.9;
+        margin: 0;
+        max-width: 500px;
     }
 
-    /* Card Styling */
-    .custom-card {
-        background: var(--card-bg);
-        padding: 1.5rem;
-        border-radius: 16px;
-        box-shadow: var(--shadow-light);
-        transition: transform 0.3s ease, box-shadow 0.3s ease;
-        border: 1px solid rgba(0,0,0,0.02);
-        margin-bottom: 1.5rem;
-        height: 100%;
-    }
-
-    .custom-card:hover {
-        transform: translateY(-5px);
-        box-shadow: var(--shadow-hover);
-    }
-    
-    .card-header {
-        font-size: 1.1rem;
-        font-weight: 600;
-        color: var(--text-dark);
+    /* Cards */
+    .card {
+        background: var(--bg-card);
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        padding: 1.25rem;
         margin-bottom: 1rem;
-        border-bottom: 2px solid #f3f4f6;
-        padding-bottom: 0.5rem;
+        box-shadow: var(--shadow-sm);
     }
 
-    /* Prediction Result Box */
-    .result-box {
-        background: linear-gradient(135deg, #ffffff 0%, #f9fafb 100%);
-        border-radius: 20px;
-        padding: 2rem;
-        text-align: center;
-        border: 2px solid var(--primary-green);
-        box-shadow: 0 10px 30px rgba(46, 125, 50, 0.1);
-        margin-bottom: 1.5rem;
-    }
-
-    .result-label {
-        font-size: 2.2rem;
-        font-weight: 800;
-        color: var(--primary-green);
-        margin: 0.5rem 0;
-        line-height: 1.2;
-    }
-
-    .result-conf {
-        font-size: 0.9rem;
-        color: var(--text-light);
-        background: #e8f5e9;
-        padding: 0.4rem 1.2rem;
-        border-radius: 50px;
-        display: inline-block;
-        margin-top: 0.5rem;
+    .card-title {
+        font-size: 0.875rem;
         font-weight: 600;
-    }
-    
-    /* Metrics Grid */
-    .metrics-grid {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
-        gap: 1rem;
-        margin-top: 1rem;
+        color: var(--text-secondary);
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        margin-bottom: 0.75rem;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
     }
 
-    .metric-item {
-        background: #f8fafc;
+    /* Stats Grid */
+    .stats-grid {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 0.75rem;
+    }
+
+    .stat-item {
+        background: var(--bg-main);
         padding: 1rem;
-        border-radius: 12px;
+        border-radius: 8px;
         text-align: center;
-        border-bottom: 3px solid var(--accent-yellow);
     }
-    
-    .metric-value {
-        font-size: 1.2rem;
+
+    .stat-value {
+        font-size: 1.5rem;
         font-weight: 700;
-        color: var(--text-dark);
+        color: var(--primary);
     }
-    
-    .metric-label {
+
+    .stat-label {
+        font-size: 0.75rem;
+        color: var(--text-secondary);
+        margin-top: 0.25rem;
+    }
+
+    /* Result Box */
+    .result-box {
+        background: linear-gradient(135deg, var(--primary-light) 0%, #fff 100%);
+        border: 2px solid var(--primary);
+        border-radius: var(--radius);
+        padding: 1.5rem;
+        text-align: center;
+    }
+
+    .result-icon {
+        font-size: 3rem;
+        margin-bottom: 0.5rem;
+    }
+
+    .result-class {
+        font-size: 1.5rem;
+        font-weight: 700;
+        color: var(--primary-dark);
+        margin-bottom: 0.5rem;
+    }
+
+    .result-confidence {
+        display: inline-block;
+        background: var(--primary);
+        color: white;
+        padding: 0.25rem 1rem;
+        border-radius: 50px;
+        font-size: 0.875rem;
+        font-weight: 500;
+    }
+
+    /* Image Container - Controlled Size */
+    .img-container {
+        background: var(--bg-card);
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        padding: 1rem;
+        text-align: center;
+    }
+
+    .img-container img {
+        max-width: 100%;
+        border-radius: 8px;
+    }
+
+    .img-caption {
         font-size: 0.8rem;
-        color: var(--text-light);
-        text-transform: uppercase;
-        margin-top: 0.2rem;
+        color: var(--text-secondary);
+        margin-top: 0.5rem;
+    }
+
+    /* Progress Bar */
+    .prob-bar {
+        margin-bottom: 0.75rem;
+    }
+
+    .prob-label {
+        display: flex;
+        justify-content: space-between;
+        font-size: 0.85rem;
+        margin-bottom: 0.25rem;
+    }
+
+    .prob-track {
+        background: var(--border);
+        border-radius: 4px;
+        height: 6px;
+        overflow: hidden;
+    }
+
+    .prob-fill {
+        height: 100%;
+        border-radius: 4px;
+        transition: width 0.5s ease;
     }
 
     /* Footer */
-    .main-footer {
-        position: fixed;
-        bottom: 0;
-        left: 0;
-        width: 100%;
-        background: white;
+    .footer {
         text-align: center;
         padding: 1rem;
-        box-shadow: 0 -4px 10px rgba(0,0,0,0.05);
-        z-index: 999;
-        font-size: 0.85rem;
-        color: var(--text-light);
-        border-top: 1px solid #f3f4f6;
-    }
-    
-    /* Fix for content being hidden behind footer */
-    .content-spacer {
-        height: 80px;
-    }
-    
-    /* File Uploader styling */
-    div[data-testid="stFileUploader"] {
-        width: 100%;
-    }
-    
-    div[data-testid="stFileUploader"] section {
-        background-color: #f0fdf4;
-        border: 2px dashed var(--primary-green);
-        border-radius: 12px;
+        color: var(--text-secondary);
+        font-size: 0.8rem;
+        margin-top: 2rem;
+        border-top: 1px solid var(--border);
     }
 
+    /* Hide Streamlit branding */
+    #MainMenu {visibility: hidden;}
+    footer {visibility: hidden;}
+    
+    /* Sidebar styling */
+    section[data-testid="stSidebar"] {
+        background: var(--bg-card);
+    }
+
+    /* File uploader */
+    div[data-testid="stFileUploader"] section {
+        background: var(--primary-light);
+        border: 2px dashed var(--primary);
+        border-radius: var(--radius);
+    }
 </style>
 """, unsafe_allow_html=True)
 
-# === SIDEBAR ===
+# === SESSION STATE ===
+if 'uploaded_image' not in st.session_state:
+    st.session_state.uploaded_image = None
+if 'prediction_result' not in st.session_state:
+    st.session_state.prediction_result = None
+if 'predictions_history' not in st.session_state:
+    st.session_state.predictions_history = []
+if 'selected_model' not in st.session_state:
+    st.session_state.selected_model = "XGBoost (Best)"
 
-with st.sidebar:
-    st.markdown("## 🌽 CornShield ML")
-    st.caption("v1.0.0 | XGBoost Model")
-    st.markdown("---")
+# === HELPER FUNCTIONS ===
+def get_cropped_vis_path():
+    """Get the cropped visualisasi folder path."""
+    return os.path.join(os.path.dirname(__file__), "visualisasi", "cropped")
+
+def get_vis_path():
+    """Get the visualisasi folder path."""
+    return os.path.join(os.path.dirname(__file__), "visualisasi")
+
+def get_sample_images_path():
+    """Get the sample images folder path."""
+    return os.path.join(os.path.dirname(__file__), "assets", "sample_images")
+
+def display_image_card(img_path, caption="", max_width=600):
+    """Display image in a nice card container with controlled width."""
+    if os.path.exists(img_path):
+        col1, col2, col3 = st.columns([1, 3, 1])
+        with col2:
+            st.image(img_path, caption=caption, width=max_width)
+
+
+# === PAGE: HOME ===
+def render_home_page():
+    # Hero
+    st.markdown("""
+    <div class="hero">
+        <h1>🌽 Corn Leaf Disease Classifier</h1>
+        <p>AI-powered diagnosis for corn leaf diseases. Detects Healthy, Damaged, Blight, and Rust conditions with high accuracy.</p>
+    </div>
+    """, unsafe_allow_html=True)
     
-    # Simple navigation feel
-    st.markdown("**📊 Dashboard Controls**")
-    
-    sample_dir = os.path.join(os.path.dirname(__file__), "assets", "sample_images")
-    sample_files = ["None"]
-    if os.path.exists(sample_dir):
-        sample_files += [f for f in os.listdir(sample_dir) if f.endswith(('.jpg', '.jpeg', '.png'))]
-    
-    selected_sample = st.selectbox("📝 Using Sample Image", sample_files)
-    
-    st.markdown("---")
-    
-    st.markdown("### 🧬 Architecture")
-    with st.expander("Feature Extraction Step"):
-        st.markdown("""
-        **1. Preprocessing**
-        - Resize (256x256)
-        - Normalization
-        
-        **2. Texture Analysis**
-        - Fine LBP (256 dims)
-        - Coarse Gradient (32 dims)
-        - DOR (25 dims)
-        
-        **3. Classification**
-        - XGBoost Inference
-        """)
-    
-    st.markdown("### 🏷️ Legend")
-    for cls in CLASS_MAP:
-        color = CLASS_COLORS[cls]
-        st.markdown(f"""
-        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; font-size: 0.9rem;">
-            <span>{cls}</span>
-            <span style="width: 12px; height: 12px; background-color: {color}; border-radius: 50%;"></span>
+    # Stats row
+    st.markdown("""
+    <div class="stats-grid">
+        <div class="stat-item">
+            <div class="stat-value">4</div>
+            <div class="stat-label">Disease Classes</div>
         </div>
+        <div class="stat-item">
+            <div class="stat-value">313</div>
+            <div class="stat-label">Features</div>
+        </div>
+        <div class="stat-item">
+            <div class="stat-value">3</div>
+            <div class="stat-label">ML Models</div>
+        </div>
+        <div class="stat-item">
+            <div class="stat-value">94%+</div>
+            <div class="stat-label">Accuracy</div>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    st.markdown("<br>", unsafe_allow_html=True)
+    
+    # Two columns: Project info & Pipeline
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        st.markdown("""
+        <div class="card">
+            <div class="card-title">📋 About This Project</div>
+            <p style="color: var(--text-secondary); font-size: 0.9rem; line-height: 1.6;">
+                <strong>CornShield</strong> is a machine learning system for automatic corn leaf disease classification.
+                It uses texture feature extraction (LBP, Gradient, DOR) combined with ensemble classifiers.
+            </p>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        st.markdown("""
+        <div class="card">
+            <div class="card-title">🧬 Processing Pipeline</div>
+            <p style="color: var(--text-secondary); font-size: 0.85rem; line-height: 1.8;">
+                1. <strong>Preprocessing</strong> → Resize 256×256, Normalize<br>
+                2. <strong>Segmentation</strong> → Otsu Thresholding<br>
+                3. <strong>Features</strong> → Fine LBP + Coarse + DOR<br>
+                4. <strong>Classification</strong> → XGBoost / RF / DT
+            </p>
+        </div>
+        """, unsafe_allow_html=True)
+    
+    with col2:
+        st.markdown("""
+        <div class="card">
+            <div class="card-title">🏷️ Disease Classes</div>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        for cls in CLASS_MAP:
+            color = CLASS_COLORS[cls]
+            desc = CLASS_DESCRIPTIONS[cls]
+            st.markdown(f"""
+            <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 12px; padding: 8px 12px; background: #f8fafc; border-radius: 8px; border-left: 3px solid {color};">
+                <span style="font-weight: 600; color: {color};">{cls}</span>
+                <span style="font-size: 0.8rem; color: #64748b;">— {desc}</span>
+            </div>
+            """, unsafe_allow_html=True)
+    
+    # Distribution visualization
+    st.markdown("<br>", unsafe_allow_html=True)
+    st.markdown("### 📊 Dataset Distribution")
+    
+    cropped_path = get_cropped_vis_path()
+    dist_img = os.path.join(cropped_path, "distribution.png")
+    display_image_card(dist_img, "Class distribution in training dataset", 700)
+
+
+# === PAGE: UPLOAD & PREVIEW ===
+def render_upload_page():
+    st.markdown("""
+    <div class="hero">
+        <h1>📤 Upload & Preview</h1>
+        <p>Upload a corn leaf image to analyze. Supports JPG, JPEG, and PNG formats.</p>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    col1, col2 = st.columns([2, 1])
+    
+    with col1:
+        uploaded_file = st.file_uploader("", type=["jpg", "jpeg", "png"], key="main_uploader")
+        
+        # Sample selector
+        sample_dir = get_sample_images_path()
+        sample_files = ["None"]
+        if os.path.exists(sample_dir):
+            sample_files += [f for f in os.listdir(sample_dir) if f.endswith(('.jpg', '.jpeg', '.png'))]
+        
+        if len(sample_files) > 1:
+            selected_sample = st.selectbox("Or use a sample image", sample_files)
+        else:
+            selected_sample = "None"
+    
+    with col2:
+        st.markdown("""
+        <div class="card">
+            <div class="card-title">💡 Tips</div>
+            <ul style="color: var(--text-secondary); font-size: 0.85rem; padding-left: 1rem;">
+                <li>Use clear, focused images</li>
+                <li>Single leaf per image</li>
+                <li>Good lighting preferred</li>
+                <li>Avoid blurry photos</li>
+            </ul>
+        </div>
+        """, unsafe_allow_html=True)
+    
+    # Process image
+    image_to_process = None
+    source_type = "Upload"
+    
+    if uploaded_file is not None:
+        image_to_process = Image.open(uploaded_file)
+        st.session_state.image_name = uploaded_file.name
+    elif selected_sample != "None":
+        sample_path = os.path.join(sample_dir, selected_sample)
+        if os.path.exists(sample_path):
+            image_to_process = Image.open(sample_path)
+            source_type = "Sample"
+            st.session_state.image_name = selected_sample
+    
+    if image_to_process:
+        st.session_state.uploaded_image = image_to_process
+        
+        st.markdown("<br>", unsafe_allow_html=True)
+        
+        from modules.preprocessing import preprocess_pil_image
+        from modules.segmentation import segment_otsu
+        
+        img_rgb_norm, gray = preprocess_pil_image(image_to_process)
+        segmentation = segment_otsu(gray)
+        
+        # Three column preview
+        col1, col2, col3 = st.columns(3)
+        
+        with col1:
+            st.markdown('<div class="card"><div class="card-title">Original</div></div>', unsafe_allow_html=True)
+            st.image(image_to_process, use_container_width=True)
+        
+        with col2:
+            st.markdown('<div class="card"><div class="card-title">Grayscale</div></div>', unsafe_allow_html=True)
+            st.image(gray, use_container_width=True, clamp=True, channels="GRAY")
+        
+        with col3:
+            st.markdown('<div class="card"><div class="card-title">Segmentation</div></div>', unsafe_allow_html=True)
+            st.image(segmentation, use_container_width=True, clamp=True, channels="GRAY")
+        
+        # Image info
+        w, h = image_to_process.size
+        st.success(f"✅ Image loaded: {w}×{h} pixels | Source: {source_type} | Ready for prediction!")
+    else:
+        st.info("👆 Upload an image or select a sample to begin analysis.")
+
+
+# === PAGE: RUN MODEL ===
+def render_run_model_page():
+    st.markdown("""
+    <div class="hero">
+        <h1>🔬 Run Model</h1>
+        <p>Select a model and run prediction on your uploaded image.</p>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    if st.session_state.uploaded_image is None:
+        st.warning("⚠️ Please upload an image first on the **Upload & Preview** page.")
+        return
+    
+    col1, col2 = st.columns([1, 2])
+    
+    with col1:
+        st.markdown('<div class="card"><div class="card-title">🖼️ Input Image</div></div>', unsafe_allow_html=True)
+        st.image(st.session_state.uploaded_image, use_container_width=True)
+        
+        model_choice = st.selectbox("🤖 Select Model", get_available_models())
+        
+        predict_btn = st.button("🔮 Run Prediction", type="primary", use_container_width=True)
+    
+    with col2:
+        if predict_btn:
+            with st.spinner(f"Running {model_choice}..."):
+                time.sleep(0.3)
+                try:
+                    pred_class, probabilities, _ = predict_image_with_model(
+                        st.session_state.uploaded_image, model_choice
+                    )
+                    
+                    st.session_state.prediction_result = {
+                        'class': pred_class,
+                        'probabilities': probabilities,
+                        'model': model_choice
+                    }
+                    
+                    st.session_state.predictions_history.append({
+                        'timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                        'image': getattr(st.session_state, 'image_name', 'Unknown'),
+                        'model': model_choice,
+                        'prediction': pred_class,
+                        'confidence': float(np.max(probabilities) * 100)
+                    })
+                except Exception as e:
+                    st.error(f"Error: {str(e)}")
+                    return
+        
+        if st.session_state.prediction_result:
+            result = st.session_state.prediction_result
+            pred_class = result['class']
+            probabilities = result['probabilities']
+            confidence = np.max(probabilities) * 100
+            
+            icons = {"Daun Sehat": "🌿", "Daun Rusak": "🍂", "Hawar Daun": "🦠", "Karat Daun": "🟤"}
+            
+            st.markdown(f"""
+            <div class="result-box">
+                <div class="result-icon">{icons.get(pred_class, "🍃")}</div>
+                <div class="result-class">{pred_class}</div>
+                <div class="result-confidence">{confidence:.1f}% confidence</div>
+                <div style="margin-top: 0.5rem; font-size: 0.85rem; color: var(--text-secondary);">Model: {result['model']}</div>
+            </div>
+            """, unsafe_allow_html=True)
+            
+            st.markdown("<br>", unsafe_allow_html=True)
+            
+            # Probability bars
+            st.markdown('<div class="card"><div class="card-title">📊 Probability Distribution</div></div>', unsafe_allow_html=True)
+            
+            class_names = get_class_names()
+            for cls, prob in zip(class_names, probabilities):
+                color = CLASS_COLORS[cls]
+                pct = prob * 100
+                st.markdown(f"""
+                <div class="prob-bar">
+                    <div class="prob-label">
+                        <span style="font-weight: {'600' if cls == pred_class else '400'};">{cls}</span>
+                        <span>{pct:.1f}%</span>
+                    </div>
+                    <div class="prob-track">
+                        <div class="prob-fill" style="width: {pct}%; background: {color};"></div>
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
+    
+    # Metrics section
+    if st.session_state.prediction_result:
+        st.markdown("<br>", unsafe_allow_html=True)
+        st.markdown("### 📈 Model Performance")
+        
+        model_to_file = {
+            "XGBoost (Best)": "confusion_xgboost.png",
+            "Random Forest": "confusion_rf.png",
+            "Decision Tree": "confusion_dt.png"
+        }
+        
+        cropped_path = get_cropped_vis_path()
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            img_file = model_to_file.get(st.session_state.prediction_result['model'])
+            if img_file:
+                img_path = os.path.join(cropped_path, img_file)
+                if os.path.exists(img_path):
+                    st.image(img_path, caption=f"Confusion Matrix - {st.session_state.prediction_result['model']}")
+        
+        with col2:
+            comparison_img = os.path.join(cropped_path, "model_comparison.png")
+            if os.path.exists(comparison_img):
+                st.image(comparison_img, caption="Model Accuracy Comparison")
+
+
+# === PAGE: EXPLAINABILITY ===
+def render_explainability_page():
+    st.markdown("""
+    <div class="hero">
+        <h1>📊 Model Explainability</h1>
+        <p>SHAP analysis reveals how the model makes predictions based on feature contributions.</p>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    cropped_path = get_cropped_vis_path()
+    
+    # SHAP Summary
+    st.markdown("### 🎯 Feature Importance (SHAP)")
+    
+    col1, col2 = st.columns([2, 1])
+    
+    with col1:
+        summary_img = os.path.join(cropped_path, "shap_summary.png")
+        if os.path.exists(summary_img):
+            st.image(summary_img, caption="SHAP Summary - Top Features by Importance")
+    
+    with col2:
+        st.markdown("""
+        <div class="card">
+            <div class="card-title">📖 How to Read</div>
+            <p style="font-size: 0.85rem; color: var(--text-secondary); line-height: 1.6;">
+                Features are ranked by importance. Longer bars = higher impact on predictions.
+                SHAP values show the contribution of each feature to the model output.
+            </p>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        st.markdown("""
+        <div class="card">
+            <div class="card-title">🧬 Feature Groups</div>
+            <div style="font-size: 0.85rem; color: var(--text-secondary);">
+                <strong>Fine LBP (256)</strong> — Local texture patterns<br>
+                <strong>Coarse (32)</strong> — Gradient magnitude<br>
+                <strong>DOR (25)</strong> — Dominant regions
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+    
+    st.markdown("<br>", unsafe_allow_html=True)
+    
+    # Force Plot & Interaction
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        st.markdown("### 💥 Force Plot")
+        force_img = os.path.join(cropped_path, "shap_force.png")
+        if os.path.exists(force_img):
+            st.image(force_img, caption="Single prediction explanation")
+        st.markdown("""
+        <p style="font-size: 0.8rem; color: var(--text-secondary);">
+            Red features push prediction higher, blue push lower. Base value is average model output.
+        </p>
+        """, unsafe_allow_html=True)
+    
+    with col2:
+        st.markdown("### 🔗 Feature Interaction")
+        interaction_img = os.path.join(cropped_path, "shap_interaction.png")
+        if os.path.exists(interaction_img):
+            st.image(interaction_img, caption="Feature dependence plot")
+        st.markdown("""
+        <p style="font-size: 0.8rem; color: var(--text-secondary);">
+            Shows how feature values relate to SHAP values. Color indicates interaction with other features.
+        </p>
         """, unsafe_allow_html=True)
 
 
-# === HERO SECTION ===
-
-st.markdown("""
-<div class="hero-container">
-    <div class="hero-title">Corn Leaf Disease Classifier</div>
-    <div class="hero-subtitle">
-        Accelerating plant pathology diagnosis with computer vision and machine learning.
-        Detects Healthy, Damaged, Blight, and Rust conditions.
-    </div>
-</div>
-""", unsafe_allow_html=True)
-
-
-# === MAIN APPLICATION ===
-col_input, col_tips = st.columns([2, 1])
-
-with col_input:
-    st.markdown("##### 📤 Upload Image Analysis")
-    uploaded_file = st.file_uploader("", type=["jpg", "jpeg", "png"], key="main_uploader")
-    
-with col_tips:
-    st.info("""
-    **💡 Tip:** For best results, ensure the image:
-    - Focuses on a single leaf
-    - Has good lighting
-    - Is not blurry
-    """)
-
-
-image_to_process = None
-source_type = "Upload"
-
-if uploaded_file is not None:
-    image_to_process = Image.open(uploaded_file)
-elif selected_sample != "None":
-    sample_path = os.path.join(sample_dir, selected_sample)
-    image_to_process = Image.open(sample_path)
-    source_type = "Sample"
-
-
-if image_to_process:
-    st.write("") # Spacer
-    
-    with st.spinner("🔬 Running texture analysis pipeline..."):
-        time.sleep(0.5) # UX Delay
-        
-        try:
-            pred_class, probabilities, segmentation = predict_image(image_to_process)
-            
-            d_col1, d_col2 = st.columns([1.2, 1])
-            
-            with d_col1:
-                st.markdown('<div class="custom-card">', unsafe_allow_html=True)
-                st.markdown('<div class="card-header">👁️ Visual Analysis</div>', unsafe_allow_html=True)
-                
-                # Tabs for different views
-                tab1, tab2 = st.tabs(["Original Image", "Otsu Segmentation"])
-                
-                with tab1:
-                    st.image(image_to_process, use_container_width=True)
-                    
-                with tab2:
-                    st.image(segmentation, use_container_width=True, clamp=True, channels="GRAY")
-                    st.caption("Otsu thresholding isolates the leaf structure from background/noise.")
-                
-                st.markdown('</div>', unsafe_allow_html=True)
-                
-
-                st.markdown('<div class="custom-card">', unsafe_allow_html=True)
-                st.markdown('<div class="card-header">📊 Image Metrics</div>', unsafe_allow_html=True)
-                
-                w, h = image_to_process.size
-                
-                st.markdown(f"""
-                <div class="metrics-grid">
-                    <div class="metric-item">
-                        <div class="metric-value">{w}x{h}</div>
-                        <div class="metric-label">Resolution</div>
-                    </div>
-                    <div class="metric-item">
-                        <div class="metric-value">313</div>
-                        <div class="metric-label">Features</div>
-                    </div>
-                    <div class="metric-item">
-                        <div class="metric-value">{source_type}</div>
-                        <div class="metric-label">Source</div>
-                    </div>
-                </div>
-                """, unsafe_allow_html=True)
-                st.markdown('</div>', unsafe_allow_html=True)
-
-            with d_col2:
-                confidence = np.max(probabilities) * 100
-                pred_color = CLASS_COLORS[pred_class]
-                
-
-                icons = {
-                    "Daun Sehat": "🌿",
-                    "Daun Rusak": "🍂",
-                    "Hawar Daun": "🦠",
-                    "Karat Daun": "🟤"
-                }
-                icon = icons.get(pred_class, "🍃")
-                
-                st.markdown(f"""
-                <div class="result-box" style="border-color: {pred_color};">
-                    <div style="font-size: 3.5rem; margin-bottom: 0.5rem; animation: pulse 2s infinite;">{icon}</div>
-                    <div style="color: #64748b; font-size: 0.9rem; letter-spacing: 1px; text-transform: uppercase;">Prediction Model Result</div>
-                    <div class="result-label" style="color: {pred_color};">{pred_class}</div>
-                    <div class="result-conf" style="color: {pred_color}; background: {pred_color}15;">
-                        Confidence Score: {confidence:.2f}%
-                    </div>
-                </div>
-                """, unsafe_allow_html=True)
-                
-
-                desc = CLASS_DESCRIPTIONS[pred_class]
-                st.markdown(f"""
-                <div class="custom-card" style="border-left: 4px solid {pred_color}; padding: 1.2rem;">
-                    <strong>📋 Diagnosis Details</strong>
-                    <p style="margin-top: 0.5rem; color: #4b5563; font-size: 0.95rem; line-height: 1.5;">{desc}</p>
-                </div>
-                """, unsafe_allow_html=True)
-                
-
-                st.markdown('<div class="custom-card">', unsafe_allow_html=True)
-                st.markdown('<div class="card-header">📉 Probability Distribution</div>', unsafe_allow_html=True)
-                
-                class_names = get_class_names()
-                
-                for cls, prob in zip(class_names, probabilities):
-                    color = CLASS_COLORS[cls]
-                    pct = prob * 100
-                    is_winner = (cls == pred_class)
-                    font_weight = "700" if is_winner else "400"
-                    opacity = "1" if is_winner else "0.6"
-                    
-                    st.markdown(f"""
-                    <div style="margin-bottom: 15px; opacity: {opacity};">
-                        <div style="display:flex; justify-content:space-between; margin-bottom:5px;">
-                            <span style="font-weight:{font_weight}; color:#1f2937;">{cls}</span>
-                            <span style="font-weight:{font_weight}; color:#1f2937;">{pct:.1f}%</span>
-                        </div>
-                        <div style="width:100%; background-color:#f3f4f6; border-radius:8px; height:8px;">
-                            <div style="width:{pct}%; background-color:{color}; height:8px; border-radius:8px;"></div>
-                        </div>
-                    </div>
-                    """, unsafe_allow_html=True)
-                
-                st.markdown('</div>', unsafe_allow_html=True)
-
-        except Exception as e:
-            st.error(f"Something went wrong during analysis. Please check the model files.")
-            st.error(str(e))
-
-else:
-
+# === PAGE: DOWNLOAD ===
+def render_download_page():
     st.markdown("""
-    <div style="
-        display: flex; 
-        flex-direction: column; 
-        align-items: center; 
-        justify-content: center; 
-        padding: 4rem; 
-        background: white; 
-        border-radius: 20px; 
-        border: 2px dashed #e5e7eb;
-        margin-top: 2rem;
-    ">
-        <div style="font-size: 4rem; margin-bottom: 1rem; opacity: 0.5;">🖼️</div>
-        <h3 style="color: #9ca3af; margin: 0;">No Image Selected</h3>
-        <p style="color: #9ca3af; margin-top: 0.5rem;">Upload an image or select a sample from the sidebar.</p>
+    <div class="hero">
+        <h1>📥 Download & Export</h1>
+        <p>Export your prediction history and access visualization gallery.</p>
     </div>
     """, unsafe_allow_html=True)
+    
+    # Prediction History
+    st.markdown("### 📋 Prediction History")
+    
+    if st.session_state.predictions_history:
+        df = pd.DataFrame(st.session_state.predictions_history)
+        st.dataframe(df, use_container_width=True, hide_index=True)
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            csv = df.to_csv(index=False)
+            st.download_button(
+                "📥 Download CSV",
+                data=csv,
+                file_name="predictions.csv",
+                mime="text/csv",
+                use_container_width=True
+            )
+        
+        with col2:
+            if st.button("🗑️ Clear History", use_container_width=True):
+                st.session_state.predictions_history = []
+                st.rerun()
+    else:
+        st.info("No predictions yet. Run predictions on the **Run Model** page first.")
+    
+    st.markdown("<br>", unsafe_allow_html=True)
+    
+    # Visualization Gallery
+    st.markdown("### 🖼️ Visualization Gallery")
+    
+    cropped_path = get_cropped_vis_path()
+    
+    if os.path.exists(cropped_path):
+        files = [f for f in os.listdir(cropped_path) if f.endswith('.png')]
+        
+        if files:
+            cols = st.columns(3)
+            for idx, f in enumerate(files):
+                with cols[idx % 3]:
+                    img_path = os.path.join(cropped_path, f)
+                    # Clean filename for display
+                    display_name = f.replace('_', ' ').replace('.png', '').title()
+                    st.image(img_path, caption=display_name)
+    else:
+        st.warning("Cropped images not found. Run crop_images.py first.")
 
 
-st.markdown('<div class="content-spacer"></div>', unsafe_allow_html=True)
+# === SIDEBAR ===
+with st.sidebar:
+    st.markdown("## 🌽 CornShield")
+    st.caption("v2.0 | Multi-Model Support")
+    st.markdown("---")
+    
+    page = st.radio(
+        "Navigation",
+        ["🏠 Home", "📤 Upload & Preview", "🔬 Run Model", "📊 Explainability", "📥 Download"],
+        label_visibility="collapsed"
+    )
+    
+    st.markdown("---")
+    
+    # Quick legend
+    st.markdown("##### 🏷️ Classes")
+    for cls in CLASS_MAP:
+        color = CLASS_COLORS[cls]
+        st.markdown(f'<span style="color: {color}; font-weight: 500;">● {cls}</span>', unsafe_allow_html=True)
 
 
+# === ROUTING ===
+if page == "🏠 Home":
+    render_home_page()
+elif page == "📤 Upload & Preview":
+    render_upload_page()
+elif page == "🔬 Run Model":
+    render_run_model_page()
+elif page == "📊 Explainability":
+    render_explainability_page()
+elif page == "📥 Download":
+    render_download_page()
+
+
+# === FOOTER ===
 st.markdown("""
-<div class="main-footer">
-    <div style="max-width: 1200px; margin: 0 auto; display: flex; justify-content: space-between; align-items: center;">
-        <div style="font-weight: 600; color: var(--primary-green);">CornShield ML</div>
-        <div>developed for Machine Learning Final Project</div>
-        <div style="font-size: 0.8rem;">2025</div>
-    </div>
+<div class="footer">
+    <strong>CornShield ML</strong> — Machine Learning Final Project 2025
 </div>
 """, unsafe_allow_html=True)
