@@ -5,10 +5,22 @@ import os
 import time
 import pandas as pd
 from datetime import datetime
+import matplotlib.pyplot as plt
 
 from modules.pipeline import predict_image_with_model, get_class_names
 from modules.model_loader import load_model, get_available_models
 from modules.utils import CLASS_MAP, CLASS_COLORS, CLASS_DESCRIPTIONS
+from modules.visualization import (
+    generate_confusion_matrix,
+    generate_model_comparison,
+    generate_metrics_table,
+    generate_distribution_plot,
+    generate_feature_importance_plot,
+    generate_evaluation_combined,
+    generate_shap_force_placeholder,
+    generate_shap_interaction_placeholder
+)
+from modules.evaluation_data import DATASET_DISTRIBUTION, METRICS, ACCURACIES
 
 # === PAGE CONFIG ===
 st.set_page_config(
@@ -344,9 +356,12 @@ def render_home_page():
     st.markdown("<br>", unsafe_allow_html=True)
     st.markdown("### 📊 Dataset Distribution")
     
-    cropped_path = get_cropped_vis_path()
-    dist_img = os.path.join(cropped_path, "distribution.png")
-    display_image_card(dist_img, "Class distribution in training dataset", 700)
+    # Generate distribution plot programmatically
+    col1, col2, col3 = st.columns([1, 3, 1])
+    with col2:
+        fig_dist = generate_distribution_plot()
+        st.pyplot(fig_dist)
+        plt.close(fig_dist)
 
 
 # === PAGE: UPLOAD & PREVIEW ===
@@ -526,27 +541,26 @@ def render_run_model_page():
         st.markdown("<br>", unsafe_allow_html=True)
         st.markdown("### 📈 Model Performance")
         
-        model_to_file = {
-            "XGBoost (Best)": "confusion_xgboost.png",
-            "Random Forest": "confusion_rf.png",
-            "Decision Tree": "confusion_dt.png"
-        }
-        
-        cropped_path = get_cropped_vis_path()
-        
         col1, col2 = st.columns(2)
         
         with col1:
-            img_file = model_to_file.get(st.session_state.prediction_result['model'])
-            if img_file:
-                img_path = os.path.join(cropped_path, img_file)
-                if os.path.exists(img_path):
-                    st.image(img_path, caption=f"Confusion Matrix - {st.session_state.prediction_result['model']}")
+            # Generate confusion matrix programmatically
+            model_name = st.session_state.prediction_result['model']
+            fig_cm = generate_confusion_matrix(model_name)
+            st.pyplot(fig_cm)
+            plt.close(fig_cm)
         
         with col2:
-            comparison_img = os.path.join(cropped_path, "model_comparison.png")
-            if os.path.exists(comparison_img):
-                st.image(comparison_img, caption="Model Accuracy Comparison")
+            # Generate model comparison chart programmatically
+            fig_comp = generate_model_comparison()
+            st.pyplot(fig_comp)
+            plt.close(fig_comp)
+        
+        # Show metrics table
+        st.markdown("<br>", unsafe_allow_html=True)
+        st.markdown("### 📋 Evaluation Metrics")
+        metrics_df = generate_metrics_table()
+        st.dataframe(metrics_df, use_container_width=True, hide_index=True)
 
 
 # === PAGE: EXPLAINABILITY ===
@@ -558,17 +572,16 @@ def render_explainability_page():
     </div>
     """, unsafe_allow_html=True)
     
-    cropped_path = get_cropped_vis_path()
-    
-    # SHAP Summary
+    # SHAP Summary - Feature Importance
     st.markdown("### 🎯 Feature Importance (SHAP)")
     
     col1, col2 = st.columns([2, 1])
     
     with col1:
-        summary_img = os.path.join(cropped_path, "shap_summary.png")
-        if os.path.exists(summary_img):
-            st.image(summary_img, caption="SHAP Summary - Top Features by Importance")
+        # Generate feature importance plot programmatically
+        fig_importance = generate_feature_importance_plot()
+        st.pyplot(fig_importance)
+        plt.close(fig_importance)
     
     with col2:
         st.markdown("""
@@ -599,9 +612,10 @@ def render_explainability_page():
     
     with col1:
         st.markdown("### 💥 Force Plot")
-        force_img = os.path.join(cropped_path, "shap_force.png")
-        if os.path.exists(force_img):
-            st.image(force_img, caption="Single prediction explanation")
+        # Generate force plot programmatically
+        fig_force = generate_shap_force_placeholder()
+        st.pyplot(fig_force)
+        plt.close(fig_force)
         st.markdown("""
         <p style="font-size: 0.8rem; color: var(--text-secondary);">
             Red features push prediction higher, blue push lower. Base value is average model output.
@@ -610,9 +624,10 @@ def render_explainability_page():
     
     with col2:
         st.markdown("### 🔗 Feature Interaction")
-        interaction_img = os.path.join(cropped_path, "shap_interaction.png")
-        if os.path.exists(interaction_img):
-            st.image(interaction_img, caption="Feature dependence plot")
+        # Generate interaction plot programmatically
+        fig_interaction = generate_shap_interaction_placeholder()
+        st.pyplot(fig_interaction)
+        plt.close(fig_interaction)
         st.markdown("""
         <p style="font-size: 0.8rem; color: var(--text-secondary);">
             Shows how feature values relate to SHAP values. Color indicates interaction with other features.
@@ -657,24 +672,59 @@ def render_download_page():
     
     st.markdown("<br>", unsafe_allow_html=True)
     
-    # Visualization Gallery
+    # Visualization Gallery - Generated charts
     st.markdown("### 🖼️ Visualization Gallery")
     
-    cropped_path = get_cropped_vis_path()
+    # Row 1: Confusion Matrices
+    st.markdown("#### Confusion Matrices")
+    cols = st.columns(3)
     
-    if os.path.exists(cropped_path):
-        files = [f for f in os.listdir(cropped_path) if f.endswith('.png')]
-        
-        if files:
-            cols = st.columns(3)
-            for idx, f in enumerate(files):
-                with cols[idx % 3]:
-                    img_path = os.path.join(cropped_path, f)
-                    # Clean filename for display
-                    display_name = f.replace('_', ' ').replace('.png', '').title()
-                    st.image(img_path, caption=display_name)
-    else:
-        st.warning("Cropped images not found. Run crop_images.py first.")
+    with cols[0]:
+        fig = generate_confusion_matrix("XGBoost")
+        st.pyplot(fig)
+        plt.close(fig)
+    
+    with cols[1]:
+        fig = generate_confusion_matrix("Random Forest")
+        st.pyplot(fig)
+        plt.close(fig)
+    
+    with cols[2]:
+        fig = generate_confusion_matrix("Decision Tree")
+        st.pyplot(fig)
+        plt.close(fig)
+    
+    st.markdown("<br>", unsafe_allow_html=True)
+    
+    # Row 2: Model Comparison & Distribution
+    st.markdown("#### Model Performance & Data Distribution")
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        fig = generate_model_comparison()
+        st.pyplot(fig)
+        plt.close(fig)
+    
+    with col2:
+        fig = generate_distribution_plot()
+        st.pyplot(fig)
+        plt.close(fig)
+    
+    st.markdown("<br>", unsafe_allow_html=True)
+    
+    # Row 3: SHAP Plots
+    st.markdown("#### Feature Importance (SHAP)")
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        fig = generate_feature_importance_plot()
+        st.pyplot(fig)
+        plt.close(fig)
+    
+    with col2:
+        fig = generate_shap_interaction_placeholder()
+        st.pyplot(fig)
+        plt.close(fig)
 
 
 # === SIDEBAR ===
