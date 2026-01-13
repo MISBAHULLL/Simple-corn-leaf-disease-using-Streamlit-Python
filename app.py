@@ -665,30 +665,53 @@ def render_explainability_page():
     
     st.markdown("<br>", unsafe_allow_html=True)
     
-    # Force Plot & Dependence
+    # Force Plot
+    st.markdown("### 💥 Force Plot")
+    fig_force = generate_shap_force_plot()
+    st.pyplot(fig_force)
+    plt.close(fig_force)
+    st.markdown("""
+    <p style="font-size: 0.8rem; color: var(--text-secondary);">
+        Merah = mendorong prediksi lebih tinggi, Biru = mendorong lebih rendah. Base value adalah rata-rata output model.
+    </p>
+    """, unsafe_allow_html=True)
+    
+    st.markdown("<br>", unsafe_allow_html=True)
+    
+    # Dependence Plots for each class
+    st.markdown("### 🔗 Dependence Plot per Kelas")
+    st.markdown("""
+    <p style="font-size: 0.85rem; color: var(--text-secondary);">
+        Menunjukkan hubungan nilai Feature 255 dengan SHAP value untuk setiap kelas. 
+        Warna menunjukkan interaksi dengan fitur lain.
+    </p>
+    """, unsafe_allow_html=True)
+    
+    # First row: Daun Rusak & Daun Sehat
     col1, col2 = st.columns(2)
     
     with col1:
-        st.markdown("### 💥 Force Plot")
-        fig_force = generate_shap_force_plot()
-        st.pyplot(fig_force)
-        plt.close(fig_force)
-        st.markdown("""
-        <p style="font-size: 0.8rem; color: var(--text-secondary);">
-            Merah = mendorong prediksi lebih tinggi, Biru = mendorong lebih rendah. Base value adalah rata-rata output model.
-        </p>
-        """, unsafe_allow_html=True)
-    
-    with col2:
-        st.markdown("### 🔗 Dependence Plot")
-        fig_dep = generate_shap_dependence_plot("Global")
+        fig_dep = generate_shap_dependence_plot("Daun Rusak")
         st.pyplot(fig_dep)
         plt.close(fig_dep)
-        st.markdown("""
-        <p style="font-size: 0.8rem; color: var(--text-secondary);">
-            Menunjukkan hubungan nilai fitur dengan SHAP value. Warna menunjukkan interaksi dengan fitur lain.
-        </p>
-        """, unsafe_allow_html=True)
+    
+    with col2:
+        fig_dep = generate_shap_dependence_plot("Daun Sehat")
+        st.pyplot(fig_dep)
+        plt.close(fig_dep)
+    
+    # Second row: Hawar Daun & Karat Daun
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        fig_dep = generate_shap_dependence_plot("Hawar Daun")
+        st.pyplot(fig_dep)
+        plt.close(fig_dep)
+    
+    with col2:
+        fig_dep = generate_shap_dependence_plot("Karat Daun")
+        st.pyplot(fig_dep)
+        plt.close(fig_dep)
 
 
 # === PAGE: DOWNLOAD ===
@@ -800,17 +823,33 @@ def render_download_page():
     
     st.markdown("<br>", unsafe_allow_html=True)
     
-    col1, col2 = st.columns(2)
+    st.markdown("**Force Plot**")
+    fig = generate_shap_force_plot()
+    st.pyplot(fig)
+    plt.close(fig)
     
+    st.markdown("<br>", unsafe_allow_html=True)
+    
+    # Dependence Plots for all classes
+    st.markdown("#### 🔗 Dependence Plot per Kelas")
+    
+    col1, col2 = st.columns(2)
     with col1:
-        st.markdown("**Force Plot**")
-        fig = generate_shap_force_plot()
+        fig = generate_shap_dependence_plot("Daun Rusak")
+        st.pyplot(fig)
+        plt.close(fig)
+    with col2:
+        fig = generate_shap_dependence_plot("Daun Sehat")
         st.pyplot(fig)
         plt.close(fig)
     
+    col1, col2 = st.columns(2)
+    with col1:
+        fig = generate_shap_dependence_plot("Hawar Daun")
+        st.pyplot(fig)
+        plt.close(fig)
     with col2:
-        st.markdown("**Dependence Plot**")
-        fig = generate_shap_dependence_plot("Global")
+        fig = generate_shap_dependence_plot("Karat Daun")
         st.pyplot(fig)
         plt.close(fig)
     
