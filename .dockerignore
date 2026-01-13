@@ -1,9 +1,22 @@
-__pycache__
+# Exclude large files and unnecessary folders
+*.ipynb
+ml.py
+ML.ipynb
+visualisasi_before_after.py
+UI_IMPROVEMENTS.md
+dataset/
+visualisasi/
+corn-leaf-disease-classifier/
+
+# Python cache
+__pycache__/
 *.pyc
 *.pyo
 *.pyd
 .Python
-env
+env/
+venv/
+.venv/
 pip-log.txt
 pip-delete-this-directory.txt
 .tox
@@ -15,6 +28,7 @@ coverage.xml
 *.cover
 *.log
 .git
+.gitignore
 .mypy_cache
 .pytest_cache
 .hypothesis

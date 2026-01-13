@@ -2,10 +2,13 @@ FROM python:3.9-slim
 
 WORKDIR /app
 
-COPY corn-leaf-disease-classifier/requirements.txt .
+COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY corn-leaf-disease-classifier/ .
+COPY app.py .
+COPY modules/ ./modules/
+COPY model/ ./model/
+COPY assets/ ./assets/
 
 EXPOSE 8501
 
